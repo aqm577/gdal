@@ -539,6 +539,45 @@ impl Group {
             Ok(dimensions)
         }
     }
+
+    pub fn create_dimension(
+        &self,
+        name: &str,
+        size: usize,
+        options: CslStringList,
+    ) -> Result<Dimension> {
+        self.create_dimension_with_type_and_direction(name, "", "", size, options)
+    }
+
+    pub fn create_dimension_with_type_and_direction(
+        &self,
+        name: &str,
+        type_: &str,
+        direction: &str,
+        size: usize,
+        options: CslStringList,
+    ) -> Result<Dimension> {
+        let name = CString::new(name)?;
+        let type_ = CString::new(type_)?;
+        let direction = CString::new(direction)?;
+
+        unsafe {
+            let c_dimension = gdal_sys::GDALGroupCreateDimension(
+                self.c_group,
+                name.as_ptr(),
+                type_.as_ptr(),
+                direction.as_ptr(),
+                size as gdal_sys::GUInt64,
+                options.as_ptr(),
+            );
+
+            if c_dimension.is_null() {
+                return Err(_last_null_pointer_err("GDALGroupCreateDimension"));
+            }
+
+            Ok(Dimension::from_c_dimension(c_dimension))
+        }
+    }
 }
 
 /// A `GDALDimension` with name and size
@@ -815,6 +854,7 @@ mod tests {
     use super::*;
 
     use crate::options::DatasetOptions;
+    use crate::DriverManager;
     use crate::{test_utils::TempFixture, Dataset, GdalOpenFlags};
 
     #[test]
@@ -1360,5 +1400,53 @@ mod tests {
 
         let dimension_names: Vec<_> = dimensions.into_iter().map(|dim| dim.name()).collect();
         assert_eq!(dimension_names, ["X", "Y"]);
+    }
+
+    #[test]
+    #[cfg_attr(feature = "gdal-src", ignore)]
+    fn test_create_dimension() {
+        let driver = DriverManager::get_driver_by_name("MEM").unwrap();
+        let root_group_options = CslStringList::new();
+        let dataset_options = CslStringList::new();
+        let dataset = driver
+            .create_multi_dimensional("", root_group_options, dataset_options)
+            .unwrap();
+
+        let root_group = dataset.root_group().unwrap();
+
+        let dimension_options = CslStringList::new();
+        let x = root_group
+            .create_dimension("x", 3, dimension_options)
+            .unwrap();
+
+        assert_eq!(x.name(), "x");
+        assert_eq!(x.size(), 3);
+    }
+
+    #[test]
+    #[cfg_attr(feature = "gdal-src", ignore)]
+    fn test_create_dimension_with_type_and_direction() {
+        let driver = DriverManager::get_driver_by_name("MEM").unwrap();
+        let root_group_options = CslStringList::new();
+        let dataset_options = CslStringList::new();
+        let dataset = driver
+            .create_multi_dimensional("", root_group_options, dataset_options)
+            .unwrap();
+
+        let root_group = dataset.root_group().unwrap();
+
+        let dimension_options = CslStringList::new();
+        let x = root_group
+            .create_dimension_with_type_and_direction(
+                "x",
+                "HORIZONTAL_X",
+                "EAST",
+                3,
+                dimension_options,
+            )
+            .unwrap();
+
+        assert_eq!(x.name(), "x");
+        assert_eq!(x.size(), 3);
     }
 }
