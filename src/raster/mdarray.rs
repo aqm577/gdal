@@ -23,7 +23,7 @@ use gdal_sys::{
 #[cfg(feature = "ndarray")]
 use ndarray::{ArrayD, IxDyn};
 
-use super::GdalType;
+use super::{GdalDataType, GdalType};
 use crate::cpl::CslStringList;
 use crate::errors::*;
 use crate::spatial_ref::SpatialRef;
@@ -624,6 +624,24 @@ impl Dimension {
 #[derive(Debug)]
 pub struct ExtendedDataType {
     c_data_type: GDALExtendedDataTypeH,
+}
+
+impl TryFrom<GdalDataType> for ExtendedDataType {
+    type Error = GdalError;
+
+    fn try_from(data_type: GdalDataType) -> Result<Self> {
+        unsafe {
+            let c_extended_data_type = GDALExtendedDataTypeCreate(data_type.gdal_ordinal());
+
+            if c_extended_data_type.is_null() {
+                return Err(_last_null_pointer_err("GDALExtendedDataTypeCreate"));
+            }
+
+            Ok(ExtendedDataType::from_c_extended_data_type(
+                c_extended_data_type,
+            ))
+        }
+    }
 }
 
 impl Drop for ExtendedDataType {
