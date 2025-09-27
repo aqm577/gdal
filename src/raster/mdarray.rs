@@ -316,6 +316,17 @@ impl MDArray {
         }
     }
 
+    pub fn set_spatial_reference(&self, spatial_ref: &SpatialRef) -> Result<()> {
+        let rv =
+            unsafe { gdal_sys::GDALMDArraySetSpatialRef(self.c_mdarray, spatial_ref.to_c_hsrs()) };
+
+        if rv != 1 {
+            return Err(_last_cpl_err(CPLErr::CE_Failure));
+        }
+
+        Ok(())
+    }
+
     pub fn no_data_value_as_double(&self) -> Option<f64> {
         let mut has_nodata = 0;
 
@@ -1521,5 +1532,9 @@ mod tests {
 
         assert_eq!(md_array.num_dimensions(), 2);
         assert_eq!(md_array.num_elements(), 3 * 2);
+
+        let epsg4326 = SpatialRef::from_epsg(4326).unwrap();
+        md_array.set_spatial_reference(&epsg4326).unwrap();
+        assert_eq!(md_array.spatial_reference().unwrap(), epsg4326);
     }
 }
