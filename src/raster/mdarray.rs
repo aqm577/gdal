@@ -481,6 +481,34 @@ impl Group {
         }
     }
 
+    pub fn create_md_array(
+        &self,
+        name: &str,
+        dimensions: &[&Dimension],
+        data_type: ExtendedDataType,
+        options: CslStringList,
+    ) -> Result<MDArray> {
+        let name = CString::new(name)?;
+        let mut dimension_ptrs: Vec<_> = dimensions.iter().map(|dim| dim.c_dimension).collect();
+
+        unsafe {
+            let c_mdarray = gdal_sys::GDALGroupCreateMDArray(
+                self.c_group,
+                name.as_ptr(),
+                dimension_ptrs.len(),
+                dimension_ptrs.as_mut_ptr(),
+                data_type.c_data_type,
+                options.as_ptr(),
+            );
+
+            if c_mdarray.is_null() {
+                return Err(_last_null_pointer_err("GDALGroupCreateMDArray"));
+            }
+
+            Ok(MDArray::from_c_mdarray(c_mdarray))
+        }
+    }
+
     pub fn open_group(&self, name: &str, options: CslStringList) -> Result<Group> {
         let name = CString::new(name)?;
 
@@ -1466,5 +1494,32 @@ mod tests {
 
         assert_eq!(x.name(), "x");
         assert_eq!(x.size(), 3);
+    }
+
+    #[test]
+    #[cfg_attr(feature = "gdal-src", ignore)]
+    fn test_create_md_array() {
+        let driver = DriverManager::get_driver_by_name("MEM").unwrap();
+        let root_group_options = CslStringList::new();
+        let dataset_options = CslStringList::new();
+        let dataset = driver
+            .create_multi_dimensional("", root_group_options, dataset_options)
+            .unwrap();
+
+        let root_group = dataset.root_group().unwrap();
+
+        let x_options = CslStringList::new();
+        let x = root_group.create_dimension("x", 3, x_options).unwrap();
+        let y_options = CslStringList::new();
+        let y = root_group.create_dimension("y", 2, y_options).unwrap();
+
+        let md_array_options = CslStringList::new();
+        let data_type = GdalDataType::Float32.try_into().unwrap();
+        let md_array = root_group
+            .create_md_array("values", &[&y, &x], data_type, md_array_options)
+            .unwrap();
+
+        assert_eq!(md_array.num_dimensions(), 2);
+        assert_eq!(md_array.num_elements(), 3 * 2);
     }
 }
