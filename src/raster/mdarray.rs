@@ -1,6 +1,7 @@
 use std::{
     ffi::{c_char, c_void, CString},
     fmt::{Debug, Display},
+    path::Path,
 };
 
 use gdal_sys::{
@@ -23,10 +24,13 @@ use gdal_sys::{
 use ndarray::{ArrayD, IxDyn};
 
 use super::GdalType;
+use crate::cpl::CslStringList;
 use crate::errors::*;
 use crate::spatial_ref::SpatialRef;
-use crate::utils::{_last_cpl_err, _last_null_pointer_err, _string, _string_array};
-use crate::{cpl::CslStringList, Dataset};
+use crate::utils::{
+    _last_cpl_err, _last_null_pointer_err, _path_to_c_string, _string, _string_array,
+};
+use crate::{Dataset, Driver};
 
 /// Represent an MDArray in a Group
 #[derive(Debug)]
@@ -777,6 +781,31 @@ impl Dataset {
             }
             Ok(Group::from_c_group(c_group))
         }
+    }
+}
+
+impl Driver {
+    pub fn create_multi_dimensional<P: AsRef<Path>>(
+        &self,
+        filename: P,
+        root_group_options: CslStringList,
+        options: CslStringList,
+    ) -> Result<Dataset> {
+        let c_filename = _path_to_c_string(filename.as_ref())?;
+        let c_dataset = unsafe {
+            gdal_sys::GDALCreateMultiDimensional(
+                self.c_driver(),
+                c_filename.as_ptr(),
+                root_group_options.as_ptr(),
+                options.as_ptr(),
+            )
+        };
+
+        if c_dataset.is_null() {
+            return Err(_last_null_pointer_err("GDALCreateMultiDimensional"));
+        };
+
+        Ok(unsafe { Dataset::from_c_dataset(c_dataset) })
     }
 }
 
