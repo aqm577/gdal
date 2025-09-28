@@ -340,6 +340,33 @@ impl MDArray {
         }
     }
 
+    pub fn set_no_data_value_as_double(&self, value: f64) -> Result<()> {
+        const FLOAT_DATA_TYPES: [GDALDataType::Type; 2] =
+            [GDALDataType::GDT_Float32, GDALDataType::GDT_Float64];
+
+        let data_type = self.datatype();
+        if !data_type.class().is_numeric() {
+            return Err(GdalError::UnsupportedMdDataType {
+                data_type: data_type.class(),
+                method_name: "GDALMDArraySetNoDataValueAsDouble",
+            });
+        }
+        if !FLOAT_DATA_TYPES.contains(&data_type.numeric_datatype()) {
+            return Err(GdalError::UnsupportedMdNumericDataType {
+                data_type: data_type.numeric_datatype(),
+                method_name: "GDALMDArraySetNoDataValueAsDouble",
+            });
+        }
+
+        let rv = unsafe { gdal_sys::GDALMDArraySetNoDataValueAsDouble(self.c_mdarray, value) };
+
+        if rv != 1 {
+            return Err(_last_cpl_err(CPLErr::CE_Failure));
+        }
+
+        Ok(())
+    }
+
     pub fn unit(&self) -> String {
         unsafe {
             // should not be freed
@@ -1194,6 +1221,35 @@ mod tests {
 
     #[test]
     #[cfg_attr(feature = "gdal-src", ignore)]
+    fn test_set_invalid_no_data_value() {
+        let fixture = "/vsizip/fixtures/byte_no_cf.zarr.zip";
+
+        let dataset_options = DatasetOptions {
+            open_flags: GdalOpenFlags::GDAL_OF_UPDATE | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
+            allowed_drivers: None,
+            open_options: None,
+            sibling_files: None,
+        };
+        let dataset = Dataset::open_ex(fixture, dataset_options).unwrap();
+
+        let root_group = dataset.root_group().unwrap();
+        let md_array = root_group
+            .open_md_array("byte_no_cf", CslStringList::new())
+            .unwrap();
+
+        let err = md_array.set_no_data_value_as_double(0.5);
+        assert!(err.is_err());
+        assert!(matches!(
+            err.unwrap_err(),
+            GdalError::UnsupportedMdNumericDataType {
+                data_type: 1,
+                method_name: "GDALMDArraySetNoDataValueAsDouble"
+            }
+        ));
+    }
+
+    #[test]
+    #[cfg_attr(feature = "gdal-src", ignore)]
     fn test_attributes() {
         let fixture = "/vsizip/fixtures/cf_nasa_4326.zarr.zip";
 
@@ -1536,5 +1592,8 @@ mod tests {
         let epsg4326 = SpatialRef::from_epsg(4326).unwrap();
         md_array.set_spatial_reference(&epsg4326).unwrap();
         assert_eq!(md_array.spatial_reference().unwrap(), epsg4326);
+
+        md_array.set_no_data_value_as_double(-9999.0).unwrap();
+        assert_eq!(md_array.no_data_value_as_double(), Some(-9999.0));
     }
 }

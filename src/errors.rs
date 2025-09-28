@@ -4,7 +4,7 @@ use std::ffi::c_int;
 use std::num::TryFromIntError;
 use thiserror::Error;
 
-use gdal_sys::{CPLErr, OGRErr, OGRFieldType, OGRwkbGeometryType};
+use gdal_sys::{CPLErr, GDALDataType, OGRErr, OGRFieldType, OGRwkbGeometryType};
 
 pub type Result<T> = std::result::Result<T, GdalError>;
 
@@ -78,6 +78,11 @@ pub enum GdalError {
     #[error("Unhandled type '{data_type}' on GDAL MD method {method_name}")]
     UnsupportedMdDataType {
         data_type: crate::raster::ExtendedDataTypeClass,
+        method_name: &'static str,
+    },
+    #[error("Unhandled numeric data type '{data_type}' on GDAL MD method {method_name}")]
+    UnsupportedMdNumericDataType {
+        data_type: GDALDataType::Type,
         method_name: &'static str,
     },
     #[error(transparent)]
